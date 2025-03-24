@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+	<title>Migrant Worker Jobs in Beijing District</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<script src='https://api.tiles.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.js'></script>
+	<script src='https://cdnjs.cloudflare.com/ajax/libs/Turf.js/5.1.5/turf.min.js'></script>
+	<link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.css' rel='stylesheet' />
+	<script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+	
+	<style>
+		::-webkit-scrollbar {
+			width: 0px;
+			/* remove scrollbar space */
+			background: transparent;
+			/* optional: just make scrollbar invisible */
+		}
+
+		.info {
+			padding: 6px 8px;
+			font: 14px/16px Arial, Helvetica, sans-serif;
+			background: white;
+			background: rgba(255, 255, 255, 0.8);
+			box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+			border-radius: 5px;
+		}
+
+		.info h4 {
+			margin: 0 0 5px;
+			color: #777;
+		}
+
+		.legend {
+			text-align: left;
+			line-height: 18px;
+			color: #555;
+		}
+
+		.legend i {
+			width: 18px;
+			height: 18px;
+			float: left;
+			margin-right: 8px;
+			opacity: 0.7;
+		}
+
+		body {
+			display: flex;
+		}
+
+		#select-menu {
+			position: absolute;
+			left: 50px;
+			top: 10px;
+			z-index: 10;
+		}
+
+		#map {
+			flex: 2;
+			height: calc(100vh - 30px);
+		}
+		#articlePlace {
+			flex: 1;
+			height: calc(100vh - 30px);
+			overflow: scroll;
+			margin: 15px;
+		}
+
+		#color-scale {
+			position: absolute;
+			bottom: 40px;
+			right: 10px;
+			z-index: 10;
+			background: rgba(255, 255, 255, 0.75);
+			padding: 5px;
+		}
+
+		#color-scale > div span {
+			display: inline-block;
+			height: 25px;
+			width: 20px;
+			margin-right: 5px;
+			vertical-align: middle;
+		}
+
+		#color-scale p {
+			font-weight: bold;
+			padding-bottom: 5px;
+			margin: 0;
+		}
+
+	</style>
+
+</head>
+
+<body>
+
+	<div id='map'>
+		<div id="dropdown">
+			<select id="select-menu">
+				<option value="Wage_mean">Mean Wage</option>
+				<option value="Wage_median">Median Wage</option>
+				<option value="count">Number of Jobs</option>
+			</select>
+		</div>
+		<div id='color-scale'>
+			<p id="scale-title">Wage</p>
+			<div class="scale-row"><span style='background-color: #ece2f0'></span><span>6000</span></div>
+			<div class="scale-row"><span style='background-color: #a6bddb'></span><span>7000</span></div>
+			<div class="scale-row"><span style='background-color: #1c9099'></span><span>8000</span></div>
+		  </div>
+		  
+
+	</div>
+	<div id='articlePlace'> 
+		<div class='title'><h1><b>Migrant Worker Jobs by District in Beijing</b></h1>
+		<p>Hop on the map to explore detailed information.</p>
+		<p>Use the dropdown to view a choropleth map of median wage, mean wage, or the number of ordinary migrant worker jobs across Beijing’s districts.</p>
+	</div>
+	<script type="text/javascript" src="geo-data.js"></script>
+
+	<script type="text/javascript">
+	//This is my access token, please sign up and get one for yourselfa if you plan to share your map
+		//This is already my own access token. You can get your own at https://account.mapbox.com/access-tokens/
+		mapboxgl.accessToken = 'pk.eyJ1IjoieWM0MzMwIiwiYSI6ImNscHcxcDI5bzA4eDUycG8waXpmZmQ3bTQifQ._UNBD4Gbd9SoYMkgjOEN-g';
+
+		var map = new mapboxgl.Map({
+			container: 'map', // HTML container ID
+			style: 'mapbox://styles/mapbox/light-v11', // style URL
+			center: [-21.9270884, 64.1436456], // starting position as [lng, lat]
+			zoom: 13
+		});
+		map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+
+// all of this JavaScript manages what's displayed on hover and click
+
+		var popup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false });
+
+		let hoverCurrentId = null
+		var datalayer;
+
+		function updateArticle(e) {
+			let feature = e.features[0]
+			document.getElementById("articlePlace").innerHTML = feature.properties.name
+		}
+
+		function startHover(e) {
+			let feature = e.features[0]
+
+			if (hoverCurrentId) {
+				map.setFeatureState({ source: 'datalayer', id: hoverCurrentId }, { hover: false });
+			}
+			hoverCurrentId = feature.id
+			map.setFeatureState({ source: 'datalayer', id: hoverCurrentId }, { hover: true });
+		}
+
+		function stopHover(e) {
+			if (hoverCurrentId) {
+				map.setFeatureState({ source: 'datalayer', id: hoverCurrentId }, { hover: false });
+			}
+			hoverCurrentId = null;
+		}
+
+		function drawPopup(e) {
+			let feature = e.features[0]
+			map.getCanvas().style.cursor = 'pointer';
+
+			var coordinates = e.lngLat;//turf.centerOfMass(feature);
+			var headline = feature.properties.name;
+			var median = feature.properties.Wage_median;
+			var mean = feature.properties.Wage_mean;
+			var count = feature.properties.count;
+
+			while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+				coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+			}
+
+			popup.setLngLat(coordinates)
+				.setHTML(`<h4>${headline}</h4><p>Median Wage: ${median}</p><p>Mean Wage: ${mean}</p><p>Number of Jobs: ${count}</p>`)
+				.addTo(map);
+		}
+
+		function removePopup(e) {
+			map.getCanvas().style.cursor = '';
+			popup.remove();
+		}
+
+		map.on('load', function () {
+			for (let i = 0; i < infoData.features.length; i++) {
+				infoData.features[i]['id'] = i + 1
+			}
+
+			datalayer = map.addLayer({
+				id: "datalayer",
+				type: "fill",
+				source: {
+					type: "geojson",
+					data: infoData,
+				},
+				paint: {
+					//'fill-color': ['get', 'color'],
+
+					'fill-color': [
+ 						'interpolate', ['linear'],
+ 						["to-number", ["get", "Wage_mean"]],  
+ 						6000, "#ece2f0", 
+ 						7000, "#a6bddb",
+ 						8000, "#1c9099" 
+ 					],
+					'fill-opacity':1,
+					'fill-outline-color': [
+						'case',
+						['boolean', ['feature-state', 'hover'], false],
+						'black',
+						'white'
+					]
+				}
+			});
+// these functions control Mouse actions
+// they make the pop-up headline or update the article text
+			// When we move the mouse over, draw the popup and change the hover style
+			map.on('mousemove', 'datalayer', function (e) {
+				startHover(e)
+				drawPopup(e)
+			});
+
+			// When we move the mouse away from a point, turn off the hovering and popup
+			map.on('mouseleave', 'datalayer', function (e) {
+				stopHover(e)
+				removePopup(e)
+			});
+
+			// When we click, update the article (the right-hand side)
+			map.on('click', 'datalayer', function (e) {
+				updateArticle(e)
+			})
+// very important!! this automatically centers the map and zooms it
+			map.fitBounds(turf.bbox(infoData), { padding: 0, linear: true })
+		})
+
+
+	</script>
+	<script>
+		function updateColorScaleUI(fieldName) {
+  const scaleDiv = document.getElementById('color-scale');
+  const title = document.getElementById('scale-title');
+
+  // 清空旧内容
+  scaleDiv.querySelectorAll('.scale-row').forEach(el => el.remove());
+
+  // 新 scale 数据
+  let scaleInfo = [];
+
+  if (fieldName === "Wage_median" || fieldName === "Wage_mean") {
+    title.textContent = "Wage (¥)";
+    scaleInfo = [
+      { color: '#ece2f0', value: '6000' },
+      { color: '#a6bddb', value: '7000' },
+      { color: '#1c9099', value: '8000' }
+    ];
+  } else if (fieldName === "count") {
+    title.textContent = "Count";
+    scaleInfo = [
+      { color: '#f1eef6', value: '0' },
+      { color: '#bdc9e1', value: '100' },
+      { color: '#74a9cf', value: '200' },
+      { color: '#0570b0', value: '300' },
+      { color: '#034e7b', value: '350' }
+    ];
+  }
+
+  // 插入新的图例行
+  scaleInfo.forEach(entry => {
+    const row = document.createElement('div');
+    row.className = 'scale-row';
+    row.innerHTML = `<span style="background-color: ${entry.color}; display:inline-block; width:20px; height:10px; margin-right:5px;"></span><span>${entry.value}</span>`;
+    scaleDiv.appendChild(row);
+  });
+}
+
+	</script>
+	<script>
+		document.getElementById('select-menu').addEventListener('change', (e) => {
+  const selectedProperty = e.target.value;
+
+  // 设置颜色表达式
+  let colorScale = [];
+  if (selectedProperty === "Wage_median" || selectedProperty === "Wage_mean") {
+    colorScale = [
+      'interpolate', ['linear'],
+      ['to-number', ['get', selectedProperty]],
+      6000, '#ece2f0',
+      7000, '#a6bddb',
+      8000, '#1c9099'
+    ];
+  } else if (selectedProperty === "count") {
+    colorScale = [
+      'interpolate', ['linear'],
+      ['to-number', ['get', selectedProperty]],
+      0, '#f1eef6',
+      100, '#bdc9e1',
+      200, '#74a9cf',
+      300, '#0570b0',
+      350, '#034e7b'
+    ];
+  }
+
+  // 更新地图颜色
+  map.setPaintProperty('datalayer', 'fill-color', colorScale);
+
+  // 更新图例
+  updateColorScaleUI(selectedProperty);
+});
+
+	</script>
+
+
+</body>
+
+</html>

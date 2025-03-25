@@ -129,7 +129,6 @@
 			<div class="scale-row"><span style='background-color: #a6bddb'></span><span>7000</span></div>
 			<div class="scale-row"><span style='background-color: #1c9099'></span><span>8000</span></div>
 		  </div>
-		  
 
 	</div>
 	<div id='articlePlace'> 
@@ -225,17 +224,7 @@
 		}
 
 		map.on('load', function () {
-			map.on('load', () => {
-  const layers = map.getStyle().layers;
-
-  for (const layer of layers) {
-    // 隐藏除你自己数据以外的所有图层
-    if (layer.id !== 'datalayer') {
-      map.setLayoutProperty(layer.id, 'visibility', 'none');
-    }
-  }
-});
-
+			
 			for (let i = 0; i < infoData.features.length; i++) {
 				infoData.features[i]['id'] = i + 1
 			}
@@ -265,7 +254,9 @@
 						'white'
 					]
 				}
-			});
+			})
+			
+
 // these functions control Mouse actions
 // they make the pop-up headline or update the article text
 			// When we move the mouse over, draw the popup and change the hover style
@@ -291,83 +282,79 @@
 
 	</script>
 	<script>
-		function updateColorScaleUI(fieldName) {
+		function updateColorScaleUI(stat, min, max) {
   const scaleDiv = document.getElementById('color-scale');
   const title = document.getElementById('scale-title');
+  title.textContent = stat;
 
   // 清空旧内容
-  scaleDiv.querySelectorAll('.scale-row').forEach(el => el.remove());
+  scaleDiv.innerHTML = '';
 
-  // 新 scale 数据
-  let scaleInfo = [];
+  // 包裹整个图例的竖直布局容器
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.alignItems = 'center';
+  wrapper.style.height = '120px'; // 总高度
+  wrapper.style.margin = '10px 0';
 
-  if (fieldName === "median" || fieldName === "mean") {
-    title.textContent = "Wage (¥)";
-    scaleInfo = [
-      { color: '#ece2f0', value: '6000' },
-      { color: '#a6bddb', value: '7000' },
-      { color: '#1c9099', value: '8000' }
-    ];
-  } else if (fieldName === "count") {
-    title.textContent = "Count";
-    scaleInfo = [
-      { color: '#f1eef6', value: '0' },
-      { color: '#bdc9e1', value: '100' },
-      { color: '#74a9cf', value: '200' },
-      { color: '#0570b0', value: '300' },
-      { color: '#034e7b', value: '350' }
-    ];
-  }
+  // 最大值 label
+  const maxLabel = document.createElement('div');
+  maxLabel.textContent = Math.round(max);
+  maxLabel.style.fontSize = '12px';
+  maxLabel.style.marginBottom = '4px';
 
-  // 插入新的图例行
-  scaleInfo.forEach(entry => {
-    const row = document.createElement('div');
-    row.className = 'scale-row';
-    row.innerHTML = `<span style="background-color: ${entry.color}; display:inline-block; width:20px; height:10px; margin-right:5px;"></span><span>${entry.value}</span>`;
-    scaleDiv.appendChild(row);
-  });
+  // 渐变条
+  const gradientBar = document.createElement('div');
+  gradientBar.style.width = '18px';
+  gradientBar.style.flex = '1';
+  gradientBar.style.background = 'linear-gradient(to top, #ece2f0, #a6bddb, #1c9099)';
+  gradientBar.style.border = '1px solid #ccc';
+  gradientBar.style.borderRadius = '3px';
+
+  // 最小值 label
+  const minLabel = document.createElement('div');
+  minLabel.textContent = Math.round(min);
+  minLabel.style.fontSize = '12px';
+  minLabel.style.marginTop = '4px';
+
+  // 组装
+  wrapper.appendChild(maxLabel);
+  wrapper.appendChild(gradientBar);
+  wrapper.appendChild(minLabel);
+
+  scaleDiv.appendChild(title);
+  scaleDiv.appendChild(wrapper);
 }
 
 	</script>
 	<script>
 		function updateMapStyle() {
   const category = document.getElementById('category-select').value;
-  const field = document.getElementById('field-select').value;
-  const property = `${category}.${field}`;
+  const stat = document.getElementById('field-select').value;
+  const fieldName = `${category}.${stat}`;
 
-  // 自动设定颜色范围（可根据 field 自定义）
-  let colorScale = [];
+  const features = map.querySourceFeatures('datalayer'); // 获取当前所有 feature
+  const [min, max] = getFieldRange(fieldName, features);
 
-  if (field === "count") {
-    colorScale = [
-      'case',
-      ['==', ['get', property], null], '#cccccc', // if null, grey
-      [
-      'interpolate', ['linear'],
-      ['to-number', ['get', property]],
-      0, '#f1eef6',
-      100, '#bdc9e1',
-      200, '#74a9cf',
-      300, '#0570b0',
-      350, '#034e7b']
-    ];
-  } else {
-	
-    colorScale = [
-
-	'case',
-      ['==', ['get', property], null], '#cccccc', // if null, grey
-      [
-      'interpolate', ['linear'],
-      ['to-number', ['get', property]],
-      6000, '#ece2f0',
-      7000, '#a6bddb',
-      8000, '#1c9099']
-    ];
+  if (min === null || max === null) {
+    console.warn("No valid data for field", fieldName);
+    return;
   }
 
+  const colorScale = [
+    'case',
+    ['==', ['get', fieldName], null], '#cccccc', // null → 灰色
+    ['interpolate', ['linear'],
+      ['to-number', ['get', fieldName]],
+      min, '#ece2f0',
+      (min + max) / 2, '#a6bddb',
+      max, '#1c9099'
+    ]
+  ];
+
   map.setPaintProperty('datalayer', 'fill-color', colorScale);
-  updateColorScaleUI(field);
+  updateColorScaleUI(stat, min, max);
 }
 
 // 绑定两个 dropdown 的 change 事件
@@ -375,7 +362,20 @@ document.getElementById('category-select').addEventListener('change', updateMapS
 document.getElementById('field-select').addEventListener('change', updateMapStyle);
 
 	</script>
+<script>
+	function getFieldRange(fieldName, features) {
+  let values = features
+    .map(f => Number(f.properties[fieldName]))
+    .filter(v => !isNaN(v) && v !== 0);  // 排除 0 和 NaN
 
+  if (values.length === 0) return [null, null];
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return [min, max];
+}
+
+</script>
 </body>
 
 </html>

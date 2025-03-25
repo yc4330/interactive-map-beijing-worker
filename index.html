@@ -100,12 +100,29 @@
 
 	<div id='map'>
 		<div id="dropdown">
-			<select id="select-menu">
-				<option value="Wage_mean">Mean Wage</option>
-				<option value="Wage_median">Median Wage</option>
-				<option value="count">Number of Jobs</option>
+			<label for="category-select">Category:</label>
+			<select id="category-select">
+			  <option value="Overall">Overall</option>
+			  <option value="Construction_Skilled_Trades">Construction/Skilled Trades</option>
+			  <option value="Customer_Service_Retail">Customer Service/Retail</option>
+			  <option value="Driver_Transportation">Driver/Transportation</option>
+			  <option value="Logistics_Warehouse">Logistics/Warehouse</option>
+			  <option value="Manufacturing_Factory">Manufacturing/Factory</option>
+			  <option value="Security">Security</option>
+			  <option value="General_Laborer">General/Laborer</option>
+			  <option value="Housekeeper_Childcare">Housekeeper/Childcare</option>
+			  <option value="Food_Service_Restaurant">Food Service/Restaurant</option>
+			  <option value="Other">Other</option>
 			</select>
-		</div>
+		  
+			<label for="field-select">Field:</label>
+			<select id="field-select">
+			  <option value="mean">Mean Wage</option>
+			  <option value="median">Median Wage</option>
+			  <option value="count">Number of Jobs</option>
+			</select>
+		  </div>
+		  
 		<div id='color-scale'>
 			<p id="scale-title">Wage</p>
 			<div class="scale-row"><span style='background-color: #ece2f0'></span><span>6000</span></div>
@@ -120,19 +137,18 @@
 		<p>Hop on the map to explore detailed information.</p>
 		<p>Use the dropdown to view a choropleth map of median wage, mean wage, or the number of ordinary migrant worker jobs across Beijing’s districts.</p>
 	</div>
-	<script type="text/javascript" src="geo-data.js"></script>
+	<script type="text/javascript" src="geo-data-new.js"></script>
 
 	<script type="text/javascript">
 	//This is my access token, please sign up and get one for yourselfa if you plan to share your map
 		//This is already my own access token. You can get your own at https://account.mapbox.com/access-tokens/
 		mapboxgl.accessToken = 'pk.eyJ1IjoieWM0MzMwIiwiYSI6ImNscHcxcDI5bzA4eDUycG8waXpmZmQ3bTQifQ._UNBD4Gbd9SoYMkgjOEN-g';
-
 		var map = new mapboxgl.Map({
-			container: 'map', // HTML container ID
-			style: 'mapbox://styles/mapbox/light-v11', // style URL
-			center: [-21.9270884, 64.1436456], // starting position as [lng, lat]
-			zoom: 13
-		});
+  container: 'map',
+  style: 'mapbox://styles/mapbox/light-v11',
+  center: [116.4, 39.9], // Beijing
+  zoom: 9
+});
 		map.addControl(new mapboxgl.NavigationControl(), 'top-left');
 
 // all of this JavaScript manages what's displayed on hover and click
@@ -165,23 +181,43 @@
 		}
 
 		function drawPopup(e) {
-			let feature = e.features[0]
-			map.getCanvas().style.cursor = 'pointer';
+  let feature = e.features[0];
+  map.getCanvas().style.cursor = 'pointer';
 
-			var coordinates = e.lngLat;//turf.centerOfMass(feature);
-			var headline = feature.properties.name;
-			var median = feature.properties.Wage_median;
-			var mean = feature.properties.Wage_mean;
-			var count = feature.properties.count;
+  const coordinates = e.lngLat;
+  const districtName = feature.properties.name;
 
-			while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
-				coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
-			}
+  // 当前选择的职业分类（如 Delivery）
+  const category = document.getElementById('category-select').value;
 
-			popup.setLngLat(coordinates)
-				.setHTML(`<h4>${headline}</h4><p>Median Wage: ${median}</p><p>Mean Wage: ${mean}</p><p>Number of Jobs: ${count}</p>`)
-				.addTo(map);
-		}
+  // 定义要显示的所有字段
+  const stats = ['median', 'mean', 'count'];
+  const statLabels = {
+    median: 'Median Wage',
+    mean: 'Mean Wage',
+    count: 'Number of Jobs'
+  };
+
+  // 构造 HTML 内容
+  let statLines = stats.map(stat => {
+    const fieldName = `${category}.${stat}`;
+    const value = feature.properties[fieldName];
+    return `<li>${statLabels[stat]}: ${value !== undefined ? value : 'N/A'}</li>`;
+  }).join("");
+
+  const categoryLabel = category.replace(/_/g, " ");
+
+  popup.setLngLat(coordinates)
+    .setHTML(`
+      <h4>${districtName}</h4>
+      <p><strong>${categoryLabel}</strong></p>
+      <ul style="padding-left: 1.2em; margin: 0;">
+        ${statLines}
+      </ul>
+    `)
+    .addTo(map);
+}
+
 
 		function removePopup(e) {
 			map.getCanvas().style.cursor = '';
@@ -189,6 +225,17 @@
 		}
 
 		map.on('load', function () {
+			map.on('load', () => {
+  const layers = map.getStyle().layers;
+
+  for (const layer of layers) {
+    // 隐藏除你自己数据以外的所有图层
+    if (layer.id !== 'datalayer') {
+      map.setLayoutProperty(layer.id, 'visibility', 'none');
+    }
+  }
+});
+
 			for (let i = 0; i < infoData.features.length; i++) {
 				infoData.features[i]['id'] = i + 1
 			}
@@ -205,7 +252,7 @@
 
 					'fill-color': [
  						'interpolate', ['linear'],
- 						["to-number", ["get", "Wage_mean"]],  
+ 						["to-number", ["get", "Overall.mean"]],  
  						6000, "#ece2f0", 
  						7000, "#a6bddb",
  						8000, "#1c9099" 
@@ -254,7 +301,7 @@
   // 新 scale 数据
   let scaleInfo = [];
 
-  if (fieldName === "Wage_median" || fieldName === "Wage_mean") {
+  if (fieldName === "median" || fieldName === "mean") {
     title.textContent = "Wage (¥)";
     scaleInfo = [
       { color: '#ece2f0', value: '6000' },
@@ -283,40 +330,43 @@
 
 	</script>
 	<script>
-		document.getElementById('select-menu').addEventListener('change', (e) => {
-  const selectedProperty = e.target.value;
+		function updateMapStyle() {
+  const category = document.getElementById('category-select').value;
+  const field = document.getElementById('field-select').value;
+  const property = `${category}.${field}`;
 
-  // 设置颜色表达式
+  // 自动设定颜色范围（可根据 field 自定义）
   let colorScale = [];
-  if (selectedProperty === "Wage_median" || selectedProperty === "Wage_mean") {
+
+  if (field === "count") {
     colorScale = [
       'interpolate', ['linear'],
-      ['to-number', ['get', selectedProperty]],
-      6000, '#ece2f0',
-      7000, '#a6bddb',
-      8000, '#1c9099'
-    ];
-  } else if (selectedProperty === "count") {
-    colorScale = [
-      'interpolate', ['linear'],
-      ['to-number', ['get', selectedProperty]],
+      ['to-number', ['get', property]],
       0, '#f1eef6',
       100, '#bdc9e1',
       200, '#74a9cf',
       300, '#0570b0',
       350, '#034e7b'
     ];
+  } else {
+    colorScale = [
+      'interpolate', ['linear'],
+      ['to-number', ['get', property]],
+      6000, '#ece2f0',
+      7000, '#a6bddb',
+      8000, '#1c9099'
+    ];
   }
 
-  // 更新地图颜色
   map.setPaintProperty('datalayer', 'fill-color', colorScale);
+  updateColorScaleUI(field);
+}
 
-  // 更新图例
-  updateColorScaleUI(selectedProperty);
-});
+// 绑定两个 dropdown 的 change 事件
+document.getElementById('category-select').addEventListener('change', updateMapStyle);
+document.getElementById('field-select').addEventListener('change', updateMapStyle);
 
 	</script>
-
 
 </body>
 

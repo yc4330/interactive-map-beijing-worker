@@ -340,21 +340,29 @@
 
   if (field === "count") {
     colorScale = [
+      'case',
+      ['==', ['get', property], null], '#cccccc', // if null, grey
+      [
       'interpolate', ['linear'],
       ['to-number', ['get', property]],
       0, '#f1eef6',
       100, '#bdc9e1',
       200, '#74a9cf',
       300, '#0570b0',
-      350, '#034e7b'
+      350, '#034e7b']
     ];
   } else {
+	
     colorScale = [
+
+	'case',
+      ['==', ['get', property], null], '#cccccc', // if null, grey
+      [
       'interpolate', ['linear'],
       ['to-number', ['get', property]],
       6000, '#ece2f0',
       7000, '#a6bddb',
-      8000, '#1c9099'
+      8000, '#1c9099']
     ];
   }
 

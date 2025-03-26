@@ -10,6 +10,8 @@
 	<script src='https://cdnjs.cloudflare.com/ajax/libs/Turf.js/5.1.5/turf.min.js'></script>
 	<link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.css' rel='stylesheet' />
 	<script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+	<script src="https://d3js.org/d3.v7.min.js"></script>
+
 	
 	<style>
 		::-webkit-scrollbar {
@@ -99,8 +101,16 @@
 <body>
 
 	<div id='map'>
-		<div id="dropdown">
-			<label for="category-select">Category:</label>
+		<div id="dropdown" style="margin-left: 100px;">
+
+			<label for="field-select">Fill-color Field:</label>
+			<select id="field-select">
+			  <option value="mean">Mean Wage</option>
+			  <option value="median">Median Wage</option>
+			  <option value="count">Number of Jobs</option>
+			</select>
+
+			<label for="category-select">Job Category:</label>
 			<select id="category-select">
 			  <option value="Overall">Overall</option>
 			  <option value="Construction_Skilled_Trades">Construction/Skilled Trades</option>
@@ -114,28 +124,37 @@
 			  <option value="Food_Service_Restaurant">Food Service/Restaurant</option>
 			  <option value="Other">Other</option>
 			</select>
+
+			<label for="benefit-select">Benefit Percentage:</label>
+<select id="benefit-select">
+	<option value="Accomodation">Accommodation</option>
+	<option value="Meal">Meal</option>
+	<option value="Insurance">Insurance</option>
+	<option value="Compensation">Compensation</option>
+	<option value="Bonus">Bonus</option>
+	<option value="Holiday">Holiday</option>
+  <option value="Training">Training</option>
+  <option value="medical_examination">Medical Examination</option>
+  <option value="Promotion">Promotion</option>
+  <option value="Flexible_worktime">Flexible Worktime</option>
+  <option value="None">None</option>
+</select>
+
 		  
-			<label for="field-select">Field:</label>
-			<select id="field-select">
-			  <option value="mean">Mean Wage</option>
-			  <option value="median">Median Wage</option>
-			  <option value="count">Number of Jobs</option>
-			</select>
 		  </div>
 		  
 		<div id='color-scale'>
-			<p id="scale-title">Wage</p>
-			<div class="scale-row"><span style='background-color: #ece2f0'></span><span>6000</span></div>
-			<div class="scale-row"><span style='background-color: #a6bddb'></span><span>7000</span></div>
-			<div class="scale-row"><span style='background-color: #1c9099'></span><span>8000</span></div>
+			<p id="scale-title"></p>
 		  </div>
 
 	</div>
 	<div id='articlePlace'> 
 		<div class='title'><h1><b>Migrant Worker Jobs by District in Beijing</b></h1>
-		<p>Hop on the map to explore detailed information.</p>
-		<p>Use the dropdown to view a choropleth map of median wage, mean wage, or the number of ordinary migrant worker jobs across Beijing’s districts.</p>
-	</div>
+			<p>Explore detailed information by hovering over the districts.</p> 
+			<p>Use the first dropdown to view a choropleth map showing median wages, mean wages, or the number of migrant worker jobs in each district of Beijing.</p> 
+			<p>Use the second dropdown to select a job category.</p>
+			<p>Select a benefit type from the third dropdown to view the percentage of jobs offering that benefit. Data is only displayed for districts with sufficient job numbers (greater than 10).</p>
+		</div>
 	<script type="text/javascript" src="geo-data-new.js"></script>
 
 	<script type="text/javascript">
@@ -222,12 +241,20 @@
 			map.getCanvas().style.cursor = '';
 			popup.remove();
 		}
-
+		let svg;
 		map.on('load', function () {
+			svg = d3.select(map.getCanvasContainer()).append('svg')
+    .attr('width', map.getCanvas().width)
+    .attr('height', map.getCanvas().height)
+    .style('position', 'absolute')
+    .style('top', 0)
+    .style('left', 0)
+    .style('pointer-events', 'none');  // 使得 SVG 图形不干扰地图的操作
 			
 			for (let i = 0; i < infoData.features.length; i++) {
 				infoData.features[i]['id'] = i + 1
 			}
+			
 
 			datalayer = map.addLayer({
 				id: "datalayer",
@@ -255,7 +282,10 @@
 					]
 				}
 			})
-			
+
+updateMapStyle();
+updateBenefitData();
+updateColorScaleUI('mean',  5825,7983);
 
 // these functions control Mouse actions
 // they make the pop-up headline or update the article text
@@ -275,6 +305,13 @@
 			map.on('click', 'datalayer', function (e) {
 				updateArticle(e)
 			})
+			map.on('move', function() {
+    drawFanShapes();  // 地图移动时重新绘制
+  });
+
+  map.on('zoom', function() {
+    drawFanShapes();  // 地图缩放时重新绘制
+  });
 // very important!! this automatically centers the map and zooms it
 			map.fitBounds(turf.bbox(infoData), { padding: 0, linear: true })
 		})
@@ -282,6 +319,87 @@
 
 	</script>
 	<script>
+		function updateBenefitData() {
+  const category = document.getElementById('category-select').value;
+  const benefitType = document.getElementById('benefit-select').value;
+  const benefitField = `${category}.${benefitType}`;
+  const countField = `${category}.count`;
+
+  // 遍历所有数据更新扇形
+  infoData.features.forEach(feature => {
+    const value = feature.properties[benefitField];
+    const count = feature.properties[countField];
+
+    // 判断条件：value > 0.1 且 count > 10
+    if (typeof value === 'number' &&  count > 10) {
+      // 计算扇形的角度，0-1比例转化为0-360度
+      const angle = value  * 360;
+      feature.properties.fanAngle = angle;  // 存储扇形角度
+      feature.properties.fanCenter = feature.geometry.coordinates[0];  // 获取区域的中心点
+    } else {
+      feature.properties.fanAngle = 0;
+      feature.properties.fanCenter = feature.geometry.coordinates[0];
+    }
+  });
+
+  // 更新扇形图形
+  drawFanShapes(countField);
+}
+
+// 绘制扇形图形
+function drawFanShapes(countField) {
+	if (!svg) {
+    console.warn('SVG element is not initialized yet.');
+    return;
+  }
+  svg.selectAll('*').remove();  // 清除之前的扇形
+
+  // 绘制每个区域的扇形
+  infoData.features.forEach(feature => {
+    const angle = feature.properties.fanAngle;
+    const center = feature.properties.centroid;
+    if (angle > 0) {
+      const arc = d3.arc()
+        .innerRadius(0)
+        .outerRadius(10)
+        .startAngle(0)
+        .endAngle((angle * Math.PI) / 180);  // 角度转弧度
+
+	  // 在中心位置绘制一个圆
+	  const screenCoord = map.project([center[0], center[1]]);  // map.project 返回屏幕坐标 [px, py]
+
+      
+	  const radius = feature.properties.countField / 100;  // 根据数量设置半径
+	  console.log(angle,radius)
+
+      // 绘制圆形
+      svg.append('circle')
+        .attr('cx', screenCoord.x)
+        .attr('cy', screenCoord.y)
+        .attr('r', 15)  // 设置圆的半径
+        .style('fill', 'white')  // 设置圆的填充色
+        .style('fill-opacity', 0.3);  // 设置透明度
+
+	  // 在圆形下面，放置text=properties.name
+	  svg.append('text')
+		.attr('x', screenCoord.x)
+		.attr('y', screenCoord.y)
+		.attr('dy', 25)  // 垂直偏移
+		.style('text-anchor', 'middle')  // 文字居中
+		.style('font-size', '10px')  // 字体大小
+		.style('fill', 'black')  // 文字颜色
+		.text(feature.properties.name);  // 文字内容
+
+      // 在每个地区的中心位置绘制扇形
+      svg.append('path')
+        .data([null])  // 用 null 包装数据
+        .attr('d', arc)
+        .attr('transform', `translate(${screenCoord.x}, ${screenCoord.y})`)
+        .style('fill', 'black');
+    }
+  });
+}
+
 		function updateColorScaleUI(stat, min, max) {
   const scaleDiv = document.getElementById('color-scale');
   const title = document.getElementById('scale-title');
@@ -296,7 +414,7 @@
   wrapper.style.flexDirection = 'column';
   wrapper.style.alignItems = 'center';
   wrapper.style.height = '120px'; // 总高度
-  wrapper.style.margin = '10px 0';
+  wrapper.style.margin = '5px 0';
 
   // 最大值 label
   const maxLabel = document.createElement('div');
@@ -325,6 +443,51 @@
 
   scaleDiv.appendChild(title);
   scaleDiv.appendChild(wrapper);
+
+  // 创建一个新的图形示例显示圆和扇形
+  const exampleSVG = d3.select(scaleDiv)
+    .append('svg')
+    .attr('width', 120)
+    .attr('height', 100)
+    .style('position', 'relative')
+    .style('margin-top', '10px');
+
+  // 在左侧绘制白色圆和黑色扇形
+  const circleRadius = 15;  // 圆的半径
+  const arcRadius = 10;  // 扇形的半径
+  const angle = 270;  // 扇形角度
+
+  // 绘制白色圆
+  exampleSVG.append('circle')
+    .attr('cx', 60)  // 圆心的 X 坐标
+    .attr('cy', 75)  // 圆心的 Y 坐标
+    .attr('r', circleRadius)
+    .style('fill', 'white')  // 圆的颜色为白色
+    .style('stroke', 'black')  // 圆的边框为黑色
+    .style('stroke-width', 1);
+
+  // 绘制黑色扇形，角度为270度，半径为10
+  const arc = d3.arc()
+    .innerRadius(0)
+    .outerRadius(arcRadius)
+    .startAngle(0)
+    .endAngle((angle * Math.PI) / 180);  // 将角度转换为弧度
+
+  // 在圆形上绘制扇形
+  exampleSVG.append('path')
+    .attr('d', arc)
+    .attr('transform', 'translate(60, 75)')  // 将扇形放置到圆形的中心
+    .style('fill', 'black');
+
+  // 添加 "Benefit" 标签
+  const Benefit_legend_text= exampleSVG.append('text')
+    .attr('x', 60)  // 设置标签的 X 坐标
+    .attr('y', 45)  // 设置标签的 Y 坐标
+    .attr('text-anchor', 'middle')
+    .style('font-size', '12px')
+    .text('Benefit Percentage');
+
+
 }
 
 	</script>
@@ -355,11 +518,13 @@
 
   map.setPaintProperty('datalayer', 'fill-color', colorScale);
   updateColorScaleUI(stat, min, max);
+  updateBenefitData();
 }
 
 // 绑定两个 dropdown 的 change 事件
 document.getElementById('category-select').addEventListener('change', updateMapStyle);
 document.getElementById('field-select').addEventListener('change', updateMapStyle);
+document.getElementById('benefit-select').addEventListener('change', updateBenefitData);
 
 	</script>
 <script>

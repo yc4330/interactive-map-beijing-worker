@@ -105,28 +105,29 @@
 
 			<label for="field-select">Fill-color Field:</label>
 			<select id="field-select">
-			  <option value="mean">Mean Wage</option>
 			  <option value="median">Median Wage</option>
+			  <option value="mean">Mean Wage</option>
 			  <option value="count">Number of Jobs</option>
 			</select>
 
 			<label for="category-select">Job Category:</label>
 			<select id="category-select">
 			  <option value="Overall">Overall</option>
+			  <option value="Manufacturing_Factory">Manufacturing/Factory</option>
+			  <option value="Security">Security</option>
 			  <option value="Construction_Skilled_Trades">Construction/Skilled Trades</option>
 			  <option value="Customer_Service_Retail">Customer Service/Retail</option>
 			  <option value="Driver_Transportation">Driver/Transportation</option>
 			  <option value="Logistics_Warehouse">Logistics/Warehouse</option>
-			  <option value="Manufacturing_Factory">Manufacturing/Factory</option>
-			  <option value="Security">Security</option>
-			  <option value="General_Laborer">General/Laborer</option>
 			  <option value="Housekeeper_Childcare">Housekeeper/Childcare</option>
 			  <option value="Food_Service_Restaurant">Food Service/Restaurant</option>
+			  <option value="General_Laborer">General/Laborer</option>
 			  <option value="Other">Other</option>
 			</select>
 
 			<label for="benefit-select">Benefit Percentage:</label>
 <select id="benefit-select">
+	<option value="None">--Select benefit--</option>
 	<option value="Accomodation">Accommodation</option>
 	<option value="Meal">Meal</option>
 	<option value="Insurance">Insurance</option>
@@ -137,7 +138,6 @@
   <option value="medical_examination">Medical Examination</option>
   <option value="Promotion">Promotion</option>
   <option value="Flexible_worktime">Flexible Worktime</option>
-  <option value="None">None</option>
 </select>
 
 		  
@@ -207,6 +207,7 @@
 
   // 当前选择的职业分类（如 Delivery）
   const category = document.getElementById('category-select').value;
+  const benefit = document.getElementById('benefit-select').value;
 
   // 定义要显示的所有字段
   const stats = ['median', 'mean', 'count'];
@@ -232,8 +233,12 @@
       <ul style="padding-left: 1.2em; margin: 0;">
         ${statLines}
       </ul>
-    `)
-    .addTo(map);
+	  <p><strong>Benefit</strong></p>
+	  <ul style="padding-left: 1.2em; margin: 0;">
+		<li>${benefit} included: ${Math.round(feature.properties[`${category}.${benefit}`] * 100) || 'N/A'}%</li>
+	  </ul>
+	`)
+	.addTo(map);
 }
 
 
